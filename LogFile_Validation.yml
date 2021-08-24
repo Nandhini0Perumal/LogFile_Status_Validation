@@ -1,0 +1,47 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+  - name: Run the commands remote system
+    win_command: "{{item}}"
+    with_items:
+    - "\\ServerName\Directory\Bin\scd.exe -batch=DWH_AVAIL_POS -ba_date=20210804 -type=DWH_AVAIL_POS -ba_queue=BATCH -ba_priority=high=ba_waitresult"
+    - "\\ServerName\Directory\Bin\scd.exe -batch=ALLPORT_VLSD -ba_date=20210415 -type=ALLPORT_VLSD -ba_queue=BATCH -ba_priority=high=ba_waitresult"
+    register: output_1
+  - debug: var=output_1
+	
+  - name: copying log file locally to check the status
+    fetch:
+      src: C:/log_file_location/log.txt
+      dest: /tmp/log_check/log.txt
+  
+  - name: checking first line in log file
+    shell: "grep -i  'The extraction Filename is complete'  /tmp/log_check/log.txt"
+    register: extraction_line
+    delegate_to: localhost
+    ignore_errors: true
+
+  - name: checking second line in log file
+    shell: "grep -i  'Status :Finished'  /tmp/log_check/log.txt"
+    register: status_line
+    delegate_to: localhost
+    ignore_errors: true
+
+  - name: success message
+    debug:
+      msg: "Status Complete"
+    register: complete_status
+    when:
+      - ('Status :Finished' in status_line.stdout)
+      - ('The extraction Filename is complete' in extraction_line.stdout )
+
+  - name: If matching string not found
+    debug:
+      msg: "Status incomplete"
+    when: complete_status is not changed
+
+  - name: remove log file from temp location
+    file:
+      path: /tmp/log_check/log.txt
+      state: absent
+    delegate_to: localhost
