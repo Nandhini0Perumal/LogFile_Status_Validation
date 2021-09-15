@@ -29,7 +29,7 @@
 
   - shell: echo "{{latest_file}}" | sed 's/[][]//g'
     register: file_path
-	  
+    
   - name: copying log file locally to check the status
     fetch:
       src: "{{file_path.stdout}}"
