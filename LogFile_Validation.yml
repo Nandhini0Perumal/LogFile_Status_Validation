@@ -9,10 +9,30 @@
     - "\\ServerName\Directory\Bin\scd.exe -batch=ALLPORT_VLSD -ba_date=20210415 -type=ALLPORT_VLSD -ba_queue=BATCH -ba_priority=high=ba_waitresult"
     register: output_1
   - debug: var=output_1
-	
+
+  - find:
+      paths: C:/log_file_location/
+      patterns: "*.txt"
+      recurse: yes
+    register: files_matched
+
+  - name: Getting latest file
+    set_fact:
+      latest_files: "{{ latest_files | default([])  + [item.path] }}"
+    loop: "{{ files_matched.files | sort(attribute='mtime', reverse=true) }}"
+    when: "item.path | dirname not in latest_files | default([]) | map('dirname')"
+    loop_control:
+      label: "{{ '%Y-%m-%d %H:%M:%S' | strftime(item.mtime) }} {{ item.path }}"
+
+  - set_fact:
+      latest_file: "{{latest_files | to_json }}"
+
+  - shell: echo "{{latest_file}}" | sed 's/[][]//g'
+    register: file_path
+	  
   - name: copying log file locally to check the status
     fetch:
-      src: C:/log_file_location/log.txt
+      src: "{{file_path.stdout}}"
       dest: /tmp/log_check/log.txt
   
   - name: checking first line in log file
