@@ -10,58 +10,68 @@
     register: output_1
   - debug: var=output_1
 
-  - find:
+  - win_find:
       paths: C:/log_file_location/
       patterns: "*.txt"
       recurse: yes
     register: files_matched
 
-  - name: Getting latest file
-    set_fact:
+  - set_fact:
       latest_files: "{{ latest_files | default([])  + [item.path] }}"
+    register: pathh
     loop: "{{ files_matched.files | sort(attribute='mtime', reverse=true) }}"
     when: "item.path | dirname not in latest_files | default([]) | map('dirname')"
     loop_control:
       label: "{{ '%Y-%m-%d %H:%M:%S' | strftime(item.mtime) }} {{ item.path }}"
-
+  
   - set_fact:
       latest_file: "{{latest_files | to_json }}"
 
-  - shell: echo "{{latest_file}}" | sed 's/[][]//g'
+  - name: removing square brackets
+    shell: echo "{{latest_file}}" | sed 's/[][]//g'
     register: file_path
+    delegate_to: localhost
     
-  - name: copying log file locally to check the status
-    fetch:
-      src: "{{file_path.stdout}}"
-      dest: /tmp/log_check/log.txt
-  
-  - name: checking first line in log file
-    shell: "grep -i  'The extraction Filename is complete'  /tmp/log_check/log.txt"
-    register: extraction_line
-    delegate_to: localhost
-    ignore_errors: true
+  - debug:
+      msg: "{{file_path.stdout}}"
 
-  - name: checking second line in log file
-    shell: "grep -i  'Status :Finished'  /tmp/log_check/log.txt"
-    register: status_line
-    delegate_to: localhost
+  - name: Extraction check
+    win_lineinfile:
+      name: "{{file_path.stdout}}"
+      line: "The extraction 'DWH_AVAIL_POS' is complete"
+      regexp: "([0-9]+( [0-9]+)+)-[0-9]+:[0-9]+ [a-zA-Z]+ The extraction '[^']*' is complete"
+      state: absent
+    check_mode: yes
+    register: conf
+    failed_when: (conf is changed) or (conf is failed)
     ignore_errors: true
+ 
+ - debug: var=conf.msg
+
+  - name: Status check
+    win_lineinfile:
+      name: "{{file_path.stdout}}"
+      line: "Status :Finished"
+      regexp: "([0-9]+( [0-9]+)+)-[0-9]+:[0-9]+ [a-zA-Z]+ Status: Finished"
+      state: absent
+    check_mode: yes
+    register: conf2
+    failed_when: (conf2 is changed) or (conf2 is failed)
+    ignore_errors: true
+  - debug: var=conf2.msg
 
   - name: success message
     debug:
       msg: "Status Complete"
     register: complete_status
+    ignore_errors: true
     when:
-      - ('Status :Finished' in status_line.stdout)
-      - ('The extraction Filename is complete' in extraction_line.stdout )
+      - (conf.msg == "")
+      - (conf2.msg == "")
 
   - name: If matching string not found
     debug:
       msg: "Status incomplete"
-    when: complete_status is not changed
-
-  - name: remove log file from temp location
-    file:
-      path: /tmp/log_check/log.txt
-      state: absent
-    delegate_to: localhost
+    when:
+      - (conf.msg != "")
+      - (conf2.msg != "")
