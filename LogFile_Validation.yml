@@ -19,10 +19,10 @@
   - set_fact:
       latest_files: "{{ latest_files | default([])  + [item.path] }}"
     register: pathh
-    loop: "{{ files_matched.files | sort(attribute='mtime', reverse=true) }}"
+    loop: "{{ files_matched.files | sort(attribute='lastwritetime', reverse=true) }}"
     when: "item.path | dirname not in latest_files | default([]) | map('dirname')"
     loop_control:
-      label: "{{ '%Y-%m-%d %H:%M:%S' | strftime(item.mtime) }} {{ item.path }}"
+      label: "{{ '%Y-%m-%d %H:%M:%S' | strftime(item.lastwritetime) }} {{ item.path }}"
   
   - set_fact:
       latest_file: "{{latest_files | to_json }}"
@@ -66,12 +66,12 @@
     register: complete_status
     ignore_errors: true
     when:
-      - (conf.msg == "")
-      - (conf2.msg == "")
+      - (conf.msg == "0 line(s) removed")
+      - (conf2.msg == "0 line(s) removed")
 
   - name: If matching string not found
     debug:
       msg: "Status incomplete"
     when:
-      - (conf.msg != "")
-      - (conf2.msg != "")
+      - (conf.msg != "0 line(s) removed")
+      - (conf2.msg != "0 line(s) removed")
